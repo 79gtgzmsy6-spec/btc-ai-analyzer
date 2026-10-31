@@ -1,0 +1,42 @@
+// PEPE即時判定スキャルピング用設定オブジェクト
+const PEPE_SCALPING_CONFIG = {
+    symbol: "PEPEUSDT",
+    timeframe: "1m",          // 1分足専用
+    emaShort: 3,
+    emaLong: 8,
+    rsiPeriod: 6,             // 超短期RSI
+    rsiOverbought: 75,
+    rsiOversold: 25,
+    volumeSpikeThreshold: 2.5, // 出来高急増倍率
+    tpPercent: 0.8,            // 利確 %
+    slPercent: 0.4             // 損切り %
+};
+
+// 即時シグナル判定関数
+function getPepeScalpSignal(currentPrice, ema3, ema8, rsi6, currentVolume, avgVolume) {
+    const isVolumeSpike = currentVolume >= (avgVolume * PEPE_SCALPING_CONFIG.volumeSpikeThreshold);
+    
+    // 【BUY/LONG判定】3EMAが8EMAを上抜け + RSIが25以下から反発 + 出来高急増
+    if (ema3 > ema8 && rsi6 <= PEPE_SCALPING_CONFIG.rsiOversold && isVolumeSpike) {
+        return {
+            signal: "STRONG_BUY",
+            entry: currentPrice,
+            tp: currentPrice * (1 + PEPE_SCALPING_CONFIG.tpPercent / 100),
+            sl: currentPrice * (1 - PEPE_SCALPING_CONFIG.slPercent / 100),
+            reason: "3EMA Golden Cross + Oversold RSI + Volume Spike"
+        };
+    }
+    
+    // 【SELL/SHORT判定】3EMAが8EMAを下抜け + RSIが75以上から反落 + 出来高急増
+    if (ema3 < ema8 && rsi6 >= PEPE_SCALPING_CONFIG.rsiOverbought && isVolumeSpike) {
+        return {
+            signal: "STRONG_SELL",
+            entry: currentPrice,
+            tp: currentPrice * (1 - PEPE_SCALPING_CONFIG.tpPercent / 100),
+            sl: currentPrice * (1 + PEPE_SCALPING_CONFIG.slPercent / 100),
+            reason: "3EMA Dead Cross + Overbought RSI + Volume Spike"
+        };
+    }
+
+    return { signal: "NEUTRAL", reason: "Wait for trigger" };
+}
