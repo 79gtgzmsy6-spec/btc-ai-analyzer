@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#101827">
+<title>BTC AI Analyzer | MEXC Futures</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1220;--panel:#121d2e;--line:#25354b;--muted:#8fa2ba;--text:#edf4ff;--green:#19c784;--red:#ff647c;--gold:#f5bd4f}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+main{max-width:900px;margin:auto;padding:16px 14px 40px}.top{display:flex;justify-content:space-between;align-items:center;gap:10px}.brand{font-weight:800;letter-spacing:.08em}.status{font-size:12px;color:var(--muted)}.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--gold);margin-right:6px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:15px;margin-top:13px}
+.label{font-size:12px;color:var(--muted)}.price{font-size:clamp(30px,8vw,44px);font-weight:800;letter-spacing:-.04em;margin:5px 0}.sub{color:var(--muted);font-size:12px}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}.metric{background:#0c1625;border-radius:12px;padding:11px}.metric strong{display:block;font-size:20px;margin-top:6px}.green{color:var(--green)}.red{color:var(--red)}.gold{color:var(--gold)}
+canvas{width:100%;height:310px;display:block}.charthead{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}.pill{border:1px solid var(--line);border-radius:99px;padding:5px 9px;font-size:11px;color:var(--muted)}
+button{background:#1c6ee8;border:0;color:white;border-radius:10px;padding:11px 15px;font-weight:700;font-size:14px}button.secondary{background:#24354b}button:disabled{opacity:.5}
+.actions{display:flex;gap:8px;flex-wrap:wrap}.note{font-size:12px;color:var(--muted);line-height:1.6}.rows{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px}.rows:last-child{border:0}
+@media(max-width:480px){main{padding:13px 10px 30px}.panel{padding:12px}.grid{gap:6px}.metric{padding:9px}.metric strong{font-size:17px}canvas{height:270px}}
+</style>
+</head>
+<body><main>
+<div class="top"><div class="brand">BTC AI ANALYZER <span class="pill">MEXC PERPETUAL</span></div><div class="status"><span class="dot" id="dot"></span><span id="conn">接続準備中</span></div></div>
+<section class="panel">
+ <div class="label">BTC_USDT 最終取引価格</div><div class="price" id="price">--</div>
+ <div class="sub"><span id="change">24時間変動 --</span>　·　最終更新 <span id="updated">--</span></div>
+</section>
+<section class="panel">
+ <div class="grid">
+  <div class="metric"><div class="label">買値 Bid</div><strong id="bid">--</strong></div>
+  <div class="metric"><div class="label">売値 Ask</div><strong id="ask">--</strong></div>
+  <div class="metric"><div class="label">資金調達率</div><strong id="funding">--</strong></div>
+ </div>
+</section>
+<section class="panel">
+ <div class="charthead"><strong>1分足ローソク足</strong><span class="pill" id="candleCount">履歴読み込み中</span></div>
+ <canvas id="chart" aria-label="BTC 1分足ローソク足チャート"></canvas>
+ <div class="sub">緑：陽線　赤：陰線　·　表示範囲：直近約100本</div>
+</section>
+<section class="panel">
+ <div class="charthead"><strong>20分先 AI予測</strong><span class="pill" id="forecastStatus">統計モデル・試作</span></div>
+ <div class="grid">
+  <div class="metric"><div class="label">上昇確率</div><strong class="green" id="upProb">--%</strong></div>
+  <div class="metric"><div class="label">下落確率</div><strong class="red" id="downProb">--%</strong></div>
+  <div class="metric"><div class="label">判定</div><strong class="gold" id="signal">WAIT</strong></div>
+ </div>
+ <div class="grid" style="margin-top:9px">
+  <div class="metric"><div class="label">20分後の中心予測</div><strong id="targetPrice">--</strong></div>
+  <div class="metric"><div class="label">予測レンジ下限</div><strong id="rangeLow">--</strong></div>
+  <div class="metric"><div class="label">予測レンジ上限</div><strong id="rangeHigh">--</strong></div>
+ </div>
+ <div class="charthead" style="margin-top:14px"><strong>今後20分の予測ローソク足</strong><span class="pill">推定値</span></div>
+ <canvas id="forecastChart" aria-label="今後20分の予測ローソク足"></canvas>
+ <p class="note">これは直近1分足の価格変化・トレンド・変動率を使う統計的な試作予測で、学習済みAIではありません。上昇・下落確率はモデル上の目安であり、利益や方向を保証しません。実運用前に過去データで精度検証が必要です。</p>
+</section>
+<section class="panel">
+ <div class="charthead"><strong>接続・データ状態</strong><span class="pill" id="feed">未接続</span></div>
+ <div class="rows"><span>価格配信</span><b id="tickerState">待機中</b></div>
+ <div class="rows"><span>1分足配信</span><b id="klineState">待機中</b></div>
+ <div class="rows"><span>履歴ローソク足</span><b id="historyState">取得待ち</b></div>
+ <div class="rows"><span>保存</span><b>この端末内メモリのみ</b></div>
+ <div class="actions" style="margin-top:12px"><button id="reconnect">再接続</button><button class="secondary" id="download">足データCSV</button></div>
+</section>
+<p class="note">読み取り専用の試作版です。注文・口座接続・APIキー入力はありません。ブラウザを閉じると、この試作版のメモリ上のデータは消えます。常時稼働・長期保存にはクラウド側の仕組みが別途必要です。</p>
+</main>
+<script>
+(()=>{
+ const BASE='https://contract.mexc.com';
+ const WS='wss://contract.mexc.com/edge';
+ const $=id=>document.getElementById(id);
+ const fmt=n=>Number(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+ let candles=[],ws=null,retry=null,alive=false,lastTicker=null;
+ function status(ok,msg){$('dot').style.background=ok?'#19c784':'#f5bd4f';$('conn').textContent=msg;$('feed').textContent=ok?'ライブ接続':'切断/待機';}
+ async function loadHistory(){
+  $('historyState').textContent='取得中…';
+  const end=Math.floor(Date.now()/1000),start=end-180*60;
+  const url=`${BASE}/api/v1/contract/kline/BTC_USDT?interval=Min1&start=${start}&end=${end}`;
+  const r=await fetch(url); if(!r.ok)throw new Error('履歴HTTP '+r.status);
+  const j=await r.json(); if(!j.success||!j.data)throw new Error(j.message||'履歴データ取得失敗');
+  const d=j.data, n=d.time.length;
+  candles=Array.from({length:n},(_,i)=>({time:Number(d.time[i]),open:+d.open[i],high:+d.high[i],low:+d.low[i],close:+d.close[i],volume:+(d.vol?.[i]??0)})).filter(x=>Number.isFinite(x.close));
+  candles.sort((a,b)=>a.time-b.time); candles=candles.slice(-180);
+  $('historyState').textContent=`${candles.length}本取得`;render();
+ }
+ function upsert(c){
+  const t=Number(c.t); if(!Number.isFinite(t))return;
+  const item={time:t,open:+c.o,high:+c.h,low:+c.l,close:+c.c,volume:+(c.q||0)};
+  const idx=candles.findIndex(x=>x.time===t);
+  if(idx>=0)candles[idx]=item; else {candles.push(item);candles.sort((a,b)=>a.time-b.time);}
+  candles=candles.slice(-180);render();forecast();
+ }
+ function render(){
+  $('candleCount').textContent=`${candles.length}本`;
+  const cv=$('chart'),ctx=cv.getContext('2d'),ratio=window.devicePixelRatio||1,w=cv.clientWidth,h=cv.clientHeight;
+  cv.width=w*ratio;cv.height=h*ratio;ctx.setTransform(ratio,0,0,ratio,0,0);ctx.clearRect(0,0,w,h);
+  if(!candles.length){ctx.fillStyle='#8fa2ba';ctx.fillText('ローソク足データ待ち…',12,30);return;}
+  const data=candles.slice(-100), highs=data.map(x=>x.high),lows=data.map(x=>x.low);
+  let max=Math.max(...highs),min=Math.min(...lows),pad=(max-min)*.12||1;max+=pad;min-=pad;
+  const left=8,right=65,top=12,bottom=22,plotW=w-left-right,plotH=h-top-bottom;
+  const y=v=>top+(max-v)/(max-min)*plotH;
+  ctx.font='10px sans-serif';ctx.strokeStyle='#25354b';ctx.fillStyle='#8fa2ba';ctx.lineWidth=1;
+  for(let k=0;k<=4;k++){let yy=top+plotH*k/4;ctx.beginPath();ctx.moveTo(left,yy);ctx.lineTo(w-right+3,yy);ctx.stroke();ctx.fillText(fmt(max-(max-min)*k/4),w-right+7,yy+3);}
+  const step=plotW/data.length,body=Math.max(2,step*.58);
+  data.forEach((c,i)=>{let x=left+i*step+step/2,up=c.close>=c.open,col=up?'#19c784':'#ff647c';ctx.strokeStyle=col;ctx.fillStyle=col;ctx.beginPath();ctx.moveTo(x,y(c.high));ctx.lineTo(x,y(c.low));ctx.stroke();let yy=Math.min(y(c.open),y(c.close)),hh=Math.max(1,Math.abs(y(c.open)-y(c.close)));ctx.fillRect(x-body/2,yy,body,hh);});
+  ctx.fillStyle='#8fa2ba';ctx.fillText(new Date(data[0].time*1000).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}),left,h-5);
+  ctx.fillText(new Date(data[data.length-1].time*1000).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}),Math.max(left,w-right-40),h-5);
+ }
+ function ema(values,period){
+  if(values.length<period)return values.at(-1)||0;
+  const k=2/(period+1);let v=values.slice(0,period).reduce((a,b)=>a+b,0)/period;
+  for(let i=period;i<values.length;i++)v=values[i]*k+v*(1-k);return v;
+ }
+ function normalCdf(x){
+  const t=1/(1+0.2316419*Math.abs(x));
+  const d=0.3989423*Math.exp(-x*x/2);
+  const prob=1-d*t*(0.3193815+t*(-0.3565638+t*(1.781478+t*(-1.821256+t*1.330274))));
+  return x>=0?prob:1-prob;
+ }
+ function forecast(){
+  if(candles.length<25)return;
+  const closes=candles.slice(-90).map(c=>c.close),last=closes.at(-1);
+  const rets=[];for(let i=1;i<closes.length;i++)rets.push(Math.log(closes[i]/closes[i-1]));
+  const recent=rets.slice(-30),mean=recent.reduce((a,b)=>a+b,0)/recent.length;
+  const variance=recent.reduce((a,b)=>a+(b-mean)**2,0)/Math.max(1,recent.length-1);
+  const sigma=Math.sqrt(variance)||0.000001;
+  const fast=ema(closes.slice(-50),9),slow=ema(closes.slice(-70),21);
+  const trend=(fast-slow)/last;
+  const momentum=rets.slice(-5).reduce((a,b)=>a+b,0)/5;
+  const drift=mean*0.55+trend*0.12+momentum*0.18;
+  const z=drift*20/(sigma*Math.sqrt(20));
+  let up=Math.max(1,Math.min(99,normalCdf(z)*100));
+  // Keep the prototype conservative: no strong call from a weak edge.
+  const down=100-up;
+  $('upProb').textContent=up.toFixed(1)+'%';$('downProb').textContent=down.toFixed(1)+'%';
+  const center=last*Math.exp(drift*20),band=last*Math.exp(1.28*sigma*Math.sqrt(20));
+  $('targetPrice').textContent=fmt(center);$('rangeLow').textContent=fmt(center/band*last);$('rangeHigh').textContent=fmt(center*band/last);
+  const edge=Math.abs(up-50);let sig='WAIT';if(up>=62)sig='LONG';else if(up<=38)sig='SHORT';
+  $('signal').textContent=sig;$('signal').className=sig==='LONG'?'green':sig==='SHORT'?'red':'gold';
+  $('forecastStatus').textContent='更新 '+new Date().toLocaleTimeString('ja-JP');
+  const fc=[];let prev=last;
+  for(let i=1;i<=20;i++){
+   const o=prev, c=o*Math.exp(drift*(0.88**(i-1)));
+   const spread=sigma*o*0.45;
+   fc.push({open:o,close:c,high:Math.max(o,c)+spread,low:Math.min(o,c)-spread});prev=c;
+  }
+  drawForecast(fc,last);
+ }
+ function drawForecast(data,last){
+  const cv=$('forecastChart');if(!cv)return;const ctx=cv.getContext('2d'),ratio=window.devicePixelRatio||1,w=cv.clientWidth,h=cv.clientHeight;
+  cv.width=w*ratio;cv.height=h*ratio;ctx.setTransform(ratio,0,0,ratio,0,0);ctx.clearRect(0,0,w,h);
+  const vals=data.flatMap(c=>[c.high,c.low]).concat([last]);let max=Math.max(...vals),min=Math.min(...vals),pad=(max-min)*.15||1;max+=pad;min-=pad;
+  const top=12,bottom=22,left=8,right=12,ph=h-top-bottom,pw=w-left-right,y=v=>top+(max-v)/(max-min)*ph;
+  ctx.strokeStyle='#25354b';ctx.fillStyle='#8fa2ba';ctx.font='10px sans-serif';
+  for(let k=0;k<=3;k++){let yy=top+ph*k/3;ctx.beginPath();ctx.moveTo(left,yy);ctx.lineTo(w-right,yy);ctx.stroke();}
+  const step=pw/data.length,bw=Math.max(3,step*.55);
+  data.forEach((c,i)=>{const x=left+i*step+step/2,col=c.close>=c.open?'#19c784':'#ff647c';ctx.strokeStyle=col;ctx.fillStyle=col;ctx.beginPath();ctx.moveTo(x,y(c.high));ctx.lineTo(x,y(c.low));ctx.stroke();ctx.fillRect(x-bw/2,Math.min(y(c.open),y(c.close)),bw,Math.max(1,Math.abs(y(c.open)-y(c.close))));});
+  ctx.fillStyle='#8fa2ba';ctx.fillText('現在',left,h-5);ctx.fillText('+20分',w-48,h-5);
+ }
+ function connect(){
+  if(ws){try{ws.close()}catch(e){}}
+  clearTimeout(retry);status(false,'接続中…');$('tickerState').textContent='接続中';$('klineState').textContent='接続中';
+  try{ws=new WebSocket(WS);}catch(e){status(false,'接続失敗');return;}
+  ws.onopen=()=>{alive=true;status(true,'MEXC接続中');ws.send(JSON.stringify({method:'sub.ticker',param:{symbol:'BTC_USDT'}}));ws.send(JSON.stringify({method:'sub.kline',param:{symbol:'BTC_USDT',interval:'Min1'}}));};
+  ws.onmessage=ev=>{
+   let m;try{m=JSON.parse(ev.data)}catch(e){return;}
+   if(m.channel==='push.ticker'&&m.data?.symbol==='BTC_USDT'){
+    const d=m.data;lastTicker=d;$('price').textContent=fmt(d.lastPrice)+' USDT';$('bid').textContent=fmt(d.bid1);$('ask').textContent=fmt(d.ask1);
+    $('funding').textContent=(Number(d.fundingRate)*100).toFixed(4)+'%';
+    const pct=Number(d.riseFallRate)*100;$('change').textContent=`24時間 ${pct>=0?'+':''}${pct.toFixed(2)}%`;$('change').className=pct>=0?'green':'red';
+    $('updated').textContent=new Date(d.timestamp||Date.now()).toLocaleTimeString('ja-JP');$('tickerState').textContent='受信中';
+   }
+   if(m.channel==='push.kline'&&m.data?.symbol==='BTC_USDT'&&m.data.interval==='Min1'){upsert(m.data);$('klineState').textContent='受信中';}
+   if(m.channel==='rs.error'){status(false,'MEXCエラー');$('conn').title=String(m.data||'');}
+  };
+  ws.onerror=()=>{status(false,'通信エラー');};
+  ws.onclose=()=>{alive=false;status(false,'切断・再接続待ち');$('tickerState').textContent='切断';$('klineState').textContent='切断';retry=setTimeout(connect,5000);};
+ }
+ $('reconnect').onclick=()=>{if(ws)ws.onclose=null;connect();};
+ $('download').onclick=()=>{
+  if(!candles.length)return alert('まだ足データがありません');
+  const lines=['time,open,high,low,close,volume',...candles.map(c=>[new Date(c.time*1000).toISOString(),c.open,c.high,c.low,c.close,c.volume].join(','))];
+  const blob=new Blob(['\ufeff'+lines.join('\n')],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='mexc_btcusdt_1m.csv';a.click();URL.revokeObjectURL(a.href);
+ };
+ window.addEventListener('resize',()=>{render();forecast();});
+ loadHistory().catch(e=>{$('historyState').textContent='取得失敗：'+e.message;});
+ connect();
+ setInterval(()=>{if(ws?.readyState===1)ws.send(JSON.stringify({method:'ping'}));},15000);
+})();
+</script></body></html>
