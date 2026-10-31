@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>PEPE SCALPING AI V1</title>
+<style>
+:root{--bg:#0d1117;--panel:#161c25;--line:#27303d;--tx:#e6ebf2;--mu:#8793a5;--buy:#2ee6a6;--sell:#ff5c7a;--wait:#8793a5;--warn:#ffc857}
+*{box-sizing:border-box;margin:0}
+html,body{background:var(--bg);color:var(--tx);font-family:-apple-system,"Hiragino Sans",system-ui,sans-serif;-webkit-text-size-adjust:100%}
+body{padding:calc(env(safe-area-inset-top,0px) + 12px) 12px calc(env(safe-area-inset-bottom,0px) + 24px);max-width:520px;margin:auto}
+.num{font-variant-numeric:tabular-nums}
+header{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px}
+h1{font-size:15px;font-weight:700;letter-spacing:.02em}
+#st{font-size:12px;color:var(--mu)}#st.ok{color:var(--buy)}#st.err{color:var(--sell)}
+.sub{font-size:11px;color:var(--mu);margin-bottom:8px}
+#price{font-size:34px;font-weight:700;margin-bottom:10px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px}
+#dec{border-width:2px;transition:border-color .2s}
+#decT{font-size:30px;font-weight:800}
+#decR{font-size:12px;color:var(--mu);margin-top:4px;line-height:1.5}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+.k{font-size:11px;color:var(--mu)}.v{font-size:15px;font-weight:600;margin-top:2px}
+.g2{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.tag{display:inline-block;font-size:11px;padding:2px 7px;border-radius:99px;border:1px solid var(--line);color:var(--mu)}
+canvas{width:100%;height:210px;display:block}
+table{width:100%;border-collapse:collapse;font-size:12px}
+td,th{padding:5px 3px;text-align:left;border-bottom:1px solid var(--line);font-weight:400}
+th{color:var(--mu)}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+button{background:var(--line);color:var(--tx);border:0;border-radius:8px;padding:10px 14px;font-size:13px;font-family:inherit}
+button:active{opacity:.7}
+.cfg{display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px}
+.cfg label{display:flex;flex-direction:column;gap:3px;color:var(--mu)}
+.cfg input{background:var(--bg);color:var(--tx);border:1px solid var(--line);border-radius:6px;padding:7px;font-size:14px;width:100%}
+.note{font-size:11px;color:var(--mu);line-height:1.6}
+</style>
+</head>
+<body>
+<header><h1>PEPE SCALPING AI V1</h1><span id="st">接続中</span></header>
+<div class="sub">MEXC先物 PEPE_USDT・1分足・分析専用(自動発注なし)</div>
+<div id="price" class="num">---</div>
+
+<div id="dec" class="panel">
+  <div class="k">現在の売買判定</div>
+  <div id="decT">WAIT</div>
+  <div id="decR">データ取得中</div>
+  <div class="g3">
+    <div><div class="k">エントリー</div><div class="v num" id="ent">---</div></div>
+    <div><div class="k">利確</div><div class="v num" id="tp">---</div></div>
+    <div><div class="k">損切り</div><div class="v num" id="sl">---</div></div>
+  </div>
+  <div class="g3">
+    <div><div class="k">残り有効時間</div><div class="v num" id="ttl">---</div></div>
+    <div><div class="k">数量(PEPE)</div><div class="v num" id="qty">---</div></div>
+    <div><div class="k">想定損益(手数料込)</div><div class="v num" id="pnl">---</div></div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="g2">
+    <div><div class="k">EMA 3 / 8</div><div class="v" id="iEma">---</div></div>
+    <div><div class="k">RSI 6</div><div class="v num" id="iRsi">---</div></div>
+    <div><div class="k">出来高(直近20本平均比)</div><div class="v num" id="iVol">---</div></div>
+    <div><div class="k">ローソク足</div><div class="v" id="iCan">---</div></div>
+    <div><div class="k">スプレッド</div><div class="v num" id="iSpr">---</div></div>
+    <div><div class="k">往復コスト</div><div class="v num" id="iCost">---</div></div>
+  </div>
+</div>
+
+<div class="panel"><canvas id="cv"></canvas><div class="note" style="margin-top:6px">直近60本 / 青=EMA3 / 橙=EMA8</div></div>
+
+<div class="panel">
+  <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px">
+    <span class="k">シグナル履歴</span>
+    <span class="row"><button id="bCsv">CSV保存</button><button id="bClr">消去</button></span>
+  </div>
+  <table><thead><tr><th>時刻</th><th>方向</th><th>価格</th><th>RSI</th><th>出来高</th></tr></thead><tbody id="hist"></tbody></table>
+</div>
+
+<div class="panel">
+  <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px">
+    <span class="k">過去データ検証(直近約1000分)</span><button id="bBt">実行</button>
+  </div>
+  <div id="bt" class="note">同じ判定ロジックを過去の1分足に当てて、TP/SLの到達順で勝率を概算します(最大30分保有)。</div>
+</div>
+
+<div class="panel">
+  <div class="k" style="margin-bottom:8px">設定</div>
+  <div class="cfg">
+    <label>利確 %<input id="cTp" type="number" step="0.05" value="0.8"></label>
+    <label>損切り %<input id="cSl" type="number" step="0.05" value="0.4"></label>
+    <label>出来高倍率<input id="cVol" type="number" step="0.1" value="2.5"></label>
+    <label>手数料 %/片道(taker)<input id="cFee" type="number" step="0.005" value="0.02"></label>
+    <label>有効期限(秒)<input id="cTtl" type="number" step="5" value="60"></label>
+    <label>許容乖離 %<input id="cDr" type="number" step="0.05" value="0.15"></label>
+    <label>連続防止(本)<input id="cCool" type="number" step="1" value="5"></label>
+    <label>証拠金×倍率<input id="cMg" type="number" step="10" value="100"></label>
+  </div>
+  <div class="note" style="margin-top:8px">レバレッジ10倍固定。コストが利確幅の30%を超える場面はWAIT。</div>
+</div>
+
+<div class="note">判定は未確定の足を含むため、足の途中で出たシグナルが足の確定で消えることがあります。勝率は上の検証と実測の両方で確認してから使ってください。</div>
+
+<script>
+const SYM='PEPE_USDT',LEV=10,$=id=>document.getElementById(id);
+const BASE='https://contract.mexc.com/api/v1/contract';
+const C=()=>({tp:+$('cTp').value,sl:+$('cSl').value,vm:+$('cVol').value,fee:+$('cFee').value,ttl:+$('cTtl').value,dr:+$('cDr').value,cool:+$('cCool').value,mg:+$('cMg').value});
+let K=[],tick=null,sig=null,lastDir=null,lastSigT=0,hist=[];
+try{hist=JSON.parse(localStorage.getItem('pepeHist')||'[]')}catch(e){}
+
+const fmt=p=>p==null||isNaN(p)?'---':(p<0.001?p.toFixed(10):p.toFixed(6));
+function ema(a,n){const k=2/(n+1),o=[];a.forEach((v,i)=>o.push(i?v*k+o[i-1]*(1-k):v));return o}
+function rsi(c,n){const o=new Array(c.length).fill(50);let g=0,l=0;
+  for(let i=1;i<c.length;i++){const d=c[i]-c[i-1],u=Math.max(d,0),w=Math.max(-d,0);
+    if(i<=n){g+=u/n;l+=w/n}else{g=(g*(n-1)+u)/n;l=(l*(n-1)+w)/n}
+    if(i>=n)o[i]=l===0?100:100-100/(1+g/l)}return o}
+
+function prep(k){return{k,e3:ema(k.map(x=>x.c),3),e8:ema(k.map(x=>x.c),8),r:rsi(k.map(x=>x.c),6)}}
+function raw(P,i,vm){ // pure signal at index i
+  if(i<25)return{dir:null};
+  const {k,e3,e8,r}=P;
+  let vs=0;for(let j=i-20;j<i-1;j++)vs+=k[j].v;const avg=vs/19||1;
+  const vr=Math.max(k[i].v,k[i-1].v)/avg;
+  const up=e3[i]>e8[i]&&(e3[i-1]<=e8[i-1]||e3[i-2]<=e8[i-2]);
+  const dn=e3[i]<e8[i]&&(e3[i-1]>=e8[i-1]||e3[i-2]>=e8[i-2]);
+  const lo=Math.min(r[i-1],r[i-2],r[i-3]),hi=Math.max(r[i-1],r[i-2],r[i-3]);
+  const rUp=r[i]>r[i-1]&&lo<50&&r[i]<80, rDn=r[i]<r[i-1]&&hi>50&&r[i]>20;
+  const bull=k[i].c>k[i].o,bear=k[i].c<k[i].o,vOk=vr>=vm;
+  let dir=null;
+  if(up&&rUp&&vOk&&bull)dir='BUY';else if(dn&&rDn&&vOk&&bear)dir='SELL';
+  return{dir,vr,up,dn,rUp,rDn,bull,bear,vOk};
+}
+
+async function jget(u){const r=await fetch(u,{cache:'no-store'});return r.json()}
+async function loadK(limit){
+  const j=await jget(`${BASE}/kline/${SYM}?interval=Min1&limit=${limit}`);
+  const d=j.data,out=[];
+  for(let i=0;i<d.time.length;i++)out.push({t:d.time[i],o:+d.open[i],h:+d.high[i],l:+d.low[i],c:+d.close[i],v:+d.vol[i]});
+  return out;
+}
+async function loadTick(){
+  const j=await jget(`${BASE}/ticker?symbol=${SYM}`);
+  const d=j.data;return{last:+d.lastPrice,bid:+d.bid1,ask:+d.ask1};
+}
+
+function costPct(){const c=C(),sp=tick&&tick.last?(tick.ask-tick.bid)/tick.last*100:0;return{sp,cost:sp+c.fee*2}}
+
+function evaluate(){
+  if(K.length<30||!tick)return;
+  const c=C(),P=prep(K),i=K.length-1,R=raw(P,i,c.vm),{sp,cost}=costPct(),now=Date.now(),px=tick.last;
+  // indicators
+  $('iEma').textContent=P.e3[i]>P.e8[i]?'3 > 8 (上)':'3 < 8 (下)';
+  $('iRsi').textContent=P.r[i].toFixed(1)+(P.r[i]>P.r[i-1]?' ↑':' ↓');
+  $('iVol').textContent=(R.vr||0).toFixed(1)+'倍';
+  $('iCan').textContent=K[i].c>K[i].o?'陽線':K[i].c<K[i].o?'陰線':'十字';
+  $('iSpr').textContent=sp.toFixed(3)+'%';
+  $('iCost').textContent=cost.toFixed(3)+'%';
+  $('price').textContent=fmt(px);
+  // active signal validity
+  let reason='';
+  if(sig){
+    const age=(now-sig.t)/1000,drift=Math.abs(px-sig.p)/sig.p*100;
+    if(age>c.ttl){reason=`期限切れ(${c.ttl}秒経過)`;sig=null}
+    else if(drift>c.dr){reason=`価格乖離${drift.toFixed(2)}%で無効`;sig=null}
+    else if(R.dir&&R.dir!==sig.dir){reason='逆方向の判定に転換';sig=null}
+  }
+  if(!sig&&R.dir){
+    const bt=K[i].t,blocked=R.dir===lastDir&&(bt-lastSigT)<c.cool*60;
+    if(cost>c.tp*0.3)reason=`コスト${cost.toFixed(3)}%が利確幅に対し過大`;
+    else if(blocked)reason='連続シグナル防止中';
+    else{sig={dir:R.dir,p:px,t:now,r:P.r[i],vr:R.vr};lastDir=R.dir;lastSigT=bt;
+      hist.unshift({t:now,d:R.dir,p:px,r:P.r[i],vr:R.vr});hist=hist.slice(0,300);
+      try{localStorage.setItem('pepeHist',JSON.stringify(hist))}catch(e){}
+      renderHist();reason=''}
+  }
+  if(!R.dir&&lastDir&&(K[i].t-lastSigT)>=c.cool*60)lastDir=null;
+  render(sig,R,reason,P,i,c,cost);
+  draw(P);
+}
+
+function render(s,R,reason,P,i,c,cost){
+  const box=$('dec'),T=$('decT');
+  if(s){
+    const L=s.dir==='BUY',col=L?'var(--buy)':'var(--sell)';
+    T.textContent=L?'BUY / LONG':'SELL / SHORT';T.style.color=col;box.style.borderColor=col;
+    const tp=L?s.p*(1+c.tp/100):s.p*(1-c.tp/100),sl=L?s.p*(1-c.sl/100):s.p*(1+c.sl/100);
+    $('ent').textContent=fmt(s.p);$('tp').textContent=fmt(tp);$('sl').textContent=fmt(sl);
+    $('ttl').textContent=Math.max(0,c.ttl-(Date.now()-s.t)/1000).toFixed(0)+'秒';
+    const notional=c.mg*LEV,qty=notional/s.p;
+    $('qty').textContent=Math.round(qty).toLocaleString();
+    const g=notional*c.tp/100,ls=notional*c.sl/100,fee=notional*cost/100;
+    $('pnl').textContent=`+${(g-fee).toFixed(2)} / -${(ls+fee).toFixed(2)}`;
+    $('decR').textContent=`EMAクロス・RSI反転・出来高${s.vr.toFixed(1)}倍を確認 / 名目${notional}USDT`;
+  }else{
+    T.textContent='WAIT';T.style.color='var(--wait)';box.style.borderColor='var(--line)';
+    ['ent','tp','sl','ttl','qty','pnl'].forEach(x=>$(x).textContent='---');
+    if(reason)$('decR').textContent=reason;
+    else{const m=[];
+      if(!(R.up||R.dn))m.push('EMAクロスなし');
+      if(!(R.rUp||R.rDn))m.push('RSI反転なし');
+      if(!R.vOk)m.push(`出来高不足(${(R.vr||0).toFixed(1)}倍)`);
+      $('decR').textContent=m.length?m.join(' / '):'方向が揃っていません';}
+  }
+}
+
+function draw(P){
+  const cv=$('cv'),dpr=window.devicePixelRatio||1,w=cv.clientWidth,h=cv.clientHeight;
+  cv.width=w*dpr;cv.height=h*dpr;const x=cv.getContext('2d');x.scale(dpr,dpr);x.clearRect(0,0,w,h);
+  const n=60,s=Math.max(0,P.k.length-n),k=P.k.slice(s);
+  let hi=-1e9,lo=1e9;k.forEach(b=>{hi=Math.max(hi,b.h);lo=Math.min(lo,b.l)});
+  const pad=(hi-lo)*.05||hi*.001;hi+=pad;lo-=pad;
+  const Y=v=>h-(v-lo)/(hi-lo)*h,bw=w/n;
+  k.forEach((b,i)=>{const cx=i*bw+bw/2,up=b.c>=b.o;x.strokeStyle=x.fillStyle=up?'#2ee6a6':'#ff5c7a';
+    x.beginPath();x.moveTo(cx,Y(b.h));x.lineTo(cx,Y(b.l));x.stroke();
+    const y1=Y(Math.max(b.o,b.c)),y2=Y(Math.min(b.o,b.c));x.fillRect(cx-bw*.35,y1,bw*.7,Math.max(1,y2-y1))});
+  [[P.e3,'#4da3ff'],[P.e8,'#ffa94d']].forEach(([a,col])=>{x.strokeStyle=col;x.lineWidth=1.5;x.beginPath();
+    a.slice(s).forEach((v,i)=>{const cx=i*bw+bw/2;i?x.lineTo(cx,Y(v)):x.moveTo(cx,Y(v))});x.stroke();x.lineWidth=1});
+  if(sig){x.strokeStyle='#ffc857';x.setLineDash([4,4]);x.beginPath();x.moveTo(0,Y(sig.p));x.lineTo(w,Y(sig.p));x.stroke();x.setLineDash([])}
+}
+
+function renderHist(){
+  const tb=$('hist');tb.innerHTML='';
+  hist.slice(0,15).forEach(h=>{const tr=document.createElement('tr'),d=new Date(h.t);
+    const t=d.toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    tr.innerHTML=`<td class="num">${t}</td><td style="color:${h.d==='BUY'?'var(--buy)':'var(--sell)'}">${h.d}</td><td class="num">${fmt(h.p)}</td><td class="num">${h.r.toFixed(0)}</td><td class="num">${h.vr.toFixed(1)}x</td>`;
+    tb.appendChild(tr)});
+  if(!hist.length)tb.innerHTML='<tr><td colspan="5" class="note">まだシグナルはありません</td></tr>';
+}
+
+$('bCsv').onclick=()=>{
+  const rows=['time,direction,price,rsi6,volume_ratio'].concat(hist.map(h=>[new Date(h.t).toISOString(),h.d,h.p,h.r.toFixed(2),h.vr.toFixed(2)].join(',')));
+  const blob=new Blob([rows.join('\n')],{type:'text/csv'}),a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);a.download='pepe_signals.csv';document.body.appendChild(a);a.click();a.remove();
+};
+$('bClr').onclick=()=>{if(confirm('履歴を消去しますか?')){hist=[];localStorage.removeItem('pepeHist');renderHist()}};
+
+$('bBt').onclick=async()=>{
+  const out=$('bt');out.textContent='取得中...';
+  try{
+    const k=await loadK(1000),P=prep(k),c=C(),{cost}=costPct(),spreadFix=cost||c.fee*2;
+    let w=0,l=0,to=0,net=0,lastI=-999;const N=c.mg*LEV;
+    for(let i=25;i<k.length-1;i++){
+      const R=raw(P,i,c.vm);if(!R.dir||i-lastI<c.cool)continue;
+      if(spreadFix>c.tp*0.3)break;
+      const L=R.dir==='BUY',e=k[i].c,tp=L?e*(1+c.tp/100):e*(1-c.tp/100),sl=L?e*(1-c.sl/100):e*(1+c.sl/100);
+      let res=0;
+      for(let j=i+1;j<Math.min(k.length,i+31);j++){
+        const hitTp=L?k[j].h>=tp:k[j].l<=tp,hitSl=L?k[j].l<=sl:k[j].h>=sl;
+        if(hitSl){res=-c.sl;break}if(hitTp){res=c.tp;break}
+        if(j===Math.min(k.length,i+31)-1){res=(L?k[j].c-e:e-k[j].c)/e*100;to++}
+      }
+      lastI=i;if(res>0)w++;else l++;net+=N*(res-spreadFix)/100;
+    }
+    const n=w+l;
+    out.innerHTML=n?`シグナル${n}回 / 勝${w} 負${l} (勝率${(w/n*100).toFixed(1)}%) / 時間切れ${to}回<br>手数料込み合計 ${net>=0?'+':''}${net.toFixed(2)} USDT<br>損益分岐勝率の目安: ${((c.sl+spreadFix)/(c.tp+c.sl)*100).toFixed(1)}%`:'該当シグナルなし(条件が厳しい可能性)';
+  }catch(e){out.textContent='取得失敗: '+e.message}
+};
+
+async function cycle(){
+  try{
+    const [t,k]=await Promise.all([loadTick(),loadK(120)]);
+    tick=t;K=k;if(K.length)K[K.length-1].c=t.last;
+    $('st').textContent='LIVE';$('st').className='ok';evaluate();
+  }catch(e){$('st').textContent='通信エラー';$('st').className='err';$('decR').textContent='MEXCに接続できません: '+e.message}
+}
+renderHist();cycle();setInterval(cycle,3000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)cycle()});
+</script>
+</body>
+</html>
